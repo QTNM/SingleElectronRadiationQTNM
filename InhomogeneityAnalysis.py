@@ -1,0 +1,68 @@
+import numpy
+import matplotlib.pyplot as pyplot
+from SingleElectronRadiation import SingleElectronRadiation as SER
+import pandas as pd
+from scipy import fft
+from scipy.signal import find_peaks
+#pyplot.rcdefaults()
+pyplot.rcParams.update({'font.size': 18})
+
+
+# Define constants
+# Antenna is just a single point here, but can take an array of positions
+antennaPoint=numpy.array([0.03,0,0]) # metres
+pointArea = 2.62894943536*10**-6 # m^2, based on Lijie's notes
+pi = numpy.pi
+B = 1 # T
+vacPerm = 8.8541878128*10**-12	# F/m - Farads per metre - Vacuum permittivity
+c = 299792458 # Speed of light in m/s
+
+
+# Import motion path
+# Motion paths are csv-format files with columns of time,x,y,z,vx,vy,vz,ax,ay,az
+particleTrajectory = pd.read_csv("ParticlePaths//HomogeneousFieldSolution.txt",sep=',')
+particleTrajectory = particleTrajectory.to_numpy()
+nPoints = particleTrajectory.shape[0]
+Times = particleTrajectory[:,0]
+EPositions = particleTrajectory[:,1:4]
+EVelocities = particleTrajectory[:,4:7]
+EAccelerations = particleTrajectory[:,7:]
+antennaArray = numpy.tile(antennaPoint,(nPoints,1)) # Repeats the antenna position in an array equal to the number of points, for convenience with later functions
+
+
+# Calculate Field/Power density/Power
+EFields = numpy.zeros((nPoints,3))
+for i in range(nPoints):
+    EFields[i] = SER.CalcRelFarEField(antennaArray[i], Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0] + SER.CalcRelNearEField(antennaArray[i], Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0]
+
+powerDensities,Powers,integratedPowers = SER.CalcIncidentPowerAntenna([antennaPoint],pointArea,Times,EPositions,EVelocities,EAccelerations)
+
+
+# Do FFT 
+normalisedPowers = integratedPowers
+FFTPowers = fft.rfft(normalisedPowers)
+SampleSpacing = (Times.max()-Times.min())/nPoints
+FFTFreqs = fft.rfftfreq(nPoints,d=SampleSpacing)
+FFTPowers = numpy.abs(FFTPowers)
+minPeakHeight = 0.01*10**-14 # Can choose a minimum height for the fft peaks to save in file
+significantmaxima = find_peaks(FFTPowers,height = minPeakHeight)
+print(significantmaxima[0])
+
+FFTMaxima = open("FFTMaximaUniformField.txt","w")
+for i in significantmaxima[0]:
+    FFTMaxima.write(str(FFTFreqs[i]))
+    FFTMaxima.write(",")
+FFTMaxima.close()
+
+
+# Make plots
+figFFT,axFFT = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axFFT.plot(FFTFreqs,numpy.abs(FFTPowers))
+axFFT.set_xlabel("Frequency (Hz)")
+axFFT.set_ylabel("Amplitude")
+figFFT.savefig("FourierPowerUniformField.png")
+
+figEField,axEField = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axEField.plot(Times,numpy.linalg.norm(EFields,axis=1))
+axEField.set_xlabel("Time (s)")
+axEField.set_ylabel("Amplitude")
