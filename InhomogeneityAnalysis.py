@@ -8,9 +8,11 @@ from scipy.signal import find_peaks
 pyplot.rcParams.update({'font.size': 18})
 
 
+StudyPrefix = "Bathtub"
+
 # Define constants
 # Antenna is just a single point here, but can take an array of positions
-antennaPoint=numpy.array([0.03,0,0]) # metres
+antennaPoint=numpy.array([0.05,0,0]) # metres
 pointArea = 2.62894943536*10**-6 # m^2, based on Lijie's notes
 pi = numpy.pi
 B = 1 # T
@@ -20,7 +22,7 @@ c = 299792458 # Speed of light in m/s
 
 # Import motion path
 # Motion paths are csv-format files with columns of time,x,y,z,vx,vy,vz,ax,ay,az
-particleTrajectory = pd.read_csv("ParticlePaths//HomogeneousFieldSolution.txt",sep=',')
+particleTrajectory = pd.read_csv("ParticlePaths//BathtubFieldSolutionWAccel.txt",sep=',')
 particleTrajectory = particleTrajectory.to_numpy()
 nPoints = particleTrajectory.shape[0]
 Times = particleTrajectory[:,0]
@@ -48,7 +50,7 @@ minPeakHeight = 0.01*10**-14 # Can choose a minimum height for the fft peaks to 
 significantmaxima = find_peaks(FFTPowers,height = minPeakHeight)
 print(significantmaxima[0])
 
-FFTMaxima = open("FFTMaximaUniformField.txt","w")
+FFTMaxima = open("%sFFTMaxima.txt" % StudyPrefix,"w")
 for i in significantmaxima[0]:
     FFTMaxima.write(str(FFTFreqs[i]))
     FFTMaxima.write(",")
@@ -58,11 +60,39 @@ FFTMaxima.close()
 # Make plots
 figFFT,axFFT = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
 axFFT.plot(FFTFreqs,numpy.abs(FFTPowers))
+#axFFT.set_xscale("log")
 axFFT.set_xlabel("Frequency (Hz)")
 axFFT.set_ylabel("Amplitude")
-figFFT.savefig("FourierPowerUniformField.png")
+figFFT.savefig("%sFourierPower.png" % StudyPrefix)
 
 figEField,axEField = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
 axEField.plot(Times,numpy.linalg.norm(EFields,axis=1))
 axEField.set_xlabel("Time (s)")
-axEField.set_ylabel("Amplitude")
+axEField.set_ylabel("E Field Magnitude (V/m)")
+figEField.savefig("%sEFieldGraph.png" % StudyPrefix)
+
+figPowerDens,axPowerDens = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axPowerDens.plot(Times,powerDensities)
+axPowerDens.set_xlabel("Time (s)")
+axPowerDens.set_ylabel("Power Density (W/m)")
+figPowerDens.savefig("%sPowerDensity.png" % StudyPrefix)
+
+figPower,axPower = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axPower.plot(Times,Powers)
+axPower.set_xlabel("Time (s)")
+axPower.set_ylabel("Power (W)")
+figPower.savefig("%sPower.png" % StudyPrefix)
+
+figPowerDensShort,axPowerDensShort = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axPowerDensShort.plot(Times[0:200],powerDensities[0:200])
+axPowerDensShort.set_xlabel("Time (s)")
+axPowerDensShort.set_ylabel("Power Density (W/m)")
+figPowerDensShort.savefig("%sPowerDensityShort.png" % StudyPrefix)
+
+
+figFFTSmall,axFFTSmall = pyplot.subplots(nrows=1,ncols=1,figsize=[18,8])
+axFFTSmall.plot(FFTFreqs,numpy.abs(FFTPowers))
+axFFTSmall.set_xlabel("Frequency (Hz)")
+axFFTSmall.set_ylabel("Amplitude")
+axFFTSmall.set_xlim(0.26e11,0.29e11)
+figFFTSmall.savefig("%sFourierPowerSmall.png" % StudyPrefix)
