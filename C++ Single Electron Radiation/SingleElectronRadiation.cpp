@@ -1,14 +1,20 @@
 #include <iostream>
-#include <cmath>
 #include <Eigen/Dense>
 
-const double eCharge{ 1.602176634e-19 }; // Coulombs
-const double vacPerm{ 8.8541878128e-12 }; // Farads per metre
-const double pi{ M_PI };
-const int c{ 299792458 }; // speed of light, m/s
+inline constexpr double eCharge{ 1.602176634e-19 }; // Coulombs
+inline constexpr double vacPerm{ 8.8541878128e-12 }; // Farads per metre
+inline constexpr double pi{ 3.141592653589793238462643383279502884 };
+inline constexpr int c{ 299792458 }; // speed of light, m/s
 
 
-std::tuple<Eigen::Vector3d,double> RelFarEField(Eigen::Vector3d evaluationPosition,double Time,Eigen::Vector3d ePosition,Eigen::Vector3d eVelocity,Eigen::Vector3d eAcceleration) {
+double RelativisticTimeDelay(Eigen::Vector3d evaluationPosition,Eigen::Vector3d ePosition) {
+    Eigen::Vector3d evaluationElectronSeparation{ (evaluationPosition-ePosition) };
+    double separationMagnitude{ evaluationElectronSeparation.norm() };
+    double timeDelay{ separationMagnitude/c };
+    return timeDelay;
+}
+
+Eigen::Vector3d RelFarEField(Eigen::Vector3d evaluationPosition,double Time,Eigen::Vector3d ePosition,Eigen::Vector3d eVelocity,Eigen::Vector3d eAcceleration) {
     double premultiplier{ eCharge/(4*pi*vacPerm*c) };
     Eigen::Vector3d evaluationElectronSeparation{ (evaluationPosition-ePosition) };
     double separationMagnitude{ evaluationElectronSeparation.norm() };
@@ -21,12 +27,11 @@ std::tuple<Eigen::Vector3d,double> RelFarEField(Eigen::Vector3d evaluationPositi
                                 ) / separationMagnitude };
     Eigen::Vector3d relFarEField{ premultiplier*farFieldPart };
 
-    double timeDelay{ separationMagnitude/c };
-    std::tuple<Eigen::Vector3d,double> relFarEFieldAndTimeDelay{ relFarEField,timeDelay };
-    return relFarEFieldAndTimeDelay;
+    return relFarEField;
 }
 
-std::tuple<Eigen::Vector3d,double> RelNearEField(Eigen::Vector3d evaluationPosition,double Time,Eigen::Vector3d ePosition,Eigen::Vector3d eVelocity,Eigen::Vector3d eAcceleration) {
+
+Eigen::Vector3d RelNearEField(Eigen::Vector3d evaluationPosition,double Time,Eigen::Vector3d ePosition,Eigen::Vector3d eVelocity,Eigen::Vector3d eAcceleration) {
     double premultiplier{ eCharge/(4*pi*vacPerm) };
     Eigen::Vector3d evaluationElectronSeparation{ (evaluationPosition-ePosition) };
     double separationMagnitude{ evaluationElectronSeparation.norm() };
@@ -36,9 +41,8 @@ std::tuple<Eigen::Vector3d,double> RelNearEField(Eigen::Vector3d evaluationPosit
 
     Eigen::Vector3d nearFieldPart{ (1-pow(eVelocity.norm()/c,2))*(normalizedEvaluationElectronSeparation-eVelocity/c) / pow(separationMagnitude,2) };
     Eigen::Vector3d relNearEField{ premultiplier*nearFieldPart };
-    double timeDelay{ separationMagnitude/c };
-    std::tuple<Eigen::Vector3d,double> relNearEFieldAndTimeDelay{ relNearEField,timeDelay };
-    return relNearEFieldAndTimeDelay;
+
+    return relNearEField;
 }
 
 double PoyntingVectorMagnitude(double electricFieldMagnitude) {
@@ -54,10 +58,10 @@ int main() {
     Eigen::Vector3d ePosition{ 3.291256444075408281e-04,1.446536715994627684e-04,-7.509693298748249674e-03 };
     Eigen::Vector3d eVelocity{ 5.324891768002842367e+07,5.790348564830546826e+07,-1.373440678852058016e+06 };
     Eigen::Vector3d eAcceleration{ -1.063518797840980582e+19,8.841211371036892160e+18,3.178407561331115246e+09 };
-    Eigen::Vector3d relFarEField{ std::get<0>(RelFarEField(detectorPosition, time, ePosition, eVelocity, eAcceleration)) };
+    Eigen::Vector3d relFarEField{ RelFarEField(detectorPosition, time, ePosition, eVelocity, eAcceleration) };
     std::cout << "Far field:\n" << relFarEField << std::endl;
 
-    Eigen::Vector3d relNearEField{ std::get<0>(RelNearEField(detectorPosition, time, ePosition, eVelocity, eAcceleration)) };
+    Eigen::Vector3d relNearEField{ RelNearEField(detectorPosition, time, ePosition, eVelocity, eAcceleration) };
     std::cout << "Near field:\n" << relNearEField << std::endl;
 
     Eigen::Vector3d totalEField{ relFarEField+relNearEField };
