@@ -161,7 +161,14 @@ def CalcIncidentPowerAntenna(antennaPosArray,pointArea,Times,EPositions,EVelocit
     return powerDensities,powers,integratedPowers
 
 
+def HalfWaveDipoleEffectiveArea(wavelength,dipoleToEmissionAngle):
+    cosFactor = ( numpy.cos(numpy.cos(dipoleToEmissionAngle)*pi/2) / numpy.sin(dipoleToEmissionAngle) )
+    effectiveArea = 1.64 * cosFactor**2 * wavelength**2 / (4*pi)
+    return effectiveArea
 
+def HertzianDipoleEffectiveArea(wavelength,dipoleToEmissionAngle):
+    effectiveArea = 3/(8*pi)*wavelength**2*numpy.sin(dipoleToEmissionAngle)**2
+    return effectiveArea
 
 
 
