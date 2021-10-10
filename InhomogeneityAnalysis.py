@@ -12,7 +12,8 @@ StudyPrefix = "Bathtub"
 
 # Define constants
 # Antenna is just a single point here, but can take an array of positions
-antennaPoint=numpy.array([0.05,0,0]) # metres
+antennaPosition=numpy.array([0.05,0,0]) # metres
+antennaAlignment=numpy.array([0,1,0])
 pointArea = 2.62894943536*10**-6 # m^2, based on Lijie's notes
 pi = numpy.pi
 B = 1 # T
@@ -29,16 +30,33 @@ Times = particleTrajectory[:,0]
 EPositions = particleTrajectory[:,1:4]
 EVelocities = particleTrajectory[:,4:7]
 EAccelerations = particleTrajectory[:,7:]
-antennaArray = numpy.tile(antennaPoint,(nPoints,1)) # Repeats the antenna position in an array equal to the number of points, for convenience with later functions
+# antennaArray = numpy.tile(antennaPosition(nPoints,1)) # Repeats the antenna position in an array equal to the number of points, for convenience with later functions
 
 
 # Calculate Field/Power density/Power
 EFields = numpy.zeros((nPoints,3))
+powerDensities = numpy.zeros(nPoints)
+Powers = numpy.zeros(nPoints)
+integratedPowers = numpy.zeros(nPoints)
+
+wavelength = 299792458 / 27990000000 
+# This is an approximation, the frequency comes from a previous run with no antenna power factor
+# In reality the wavelength changes as the power changes, not sure how this can be known before knowing the power
+# To get the wavelength you'd need the frequency, from Fourier transform which we only get after the power...
+
 for i in range(nPoints):
-    EFields[i] = SER.CalcRelFarEField(antennaArray[i], Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0] + SER.CalcRelNearEField(antennaArray[i], Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0]
+    EFields[i] = SER.CalcRelFarEField(antennaPosition, Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0] + SER.CalcRelNearEField(antennaPosition, Times[i], EPositions[i], EVelocities[i], EAccelerations[i])[0]
+    powerDensities[i] = SER.CalcPoyntingVectorMagnitude(numpy.linalg.norm(EFields[i]))
+    cosDipoleToEmissionAngle = numpy.dot(EPositions[i]-antennaPosition,antennaAlignment)  \
+    / ( numpy.linalg.norm(EPositions[i]-antennaPosition)*numpy.linalg.norm(antennaAlignment) )
+    dipoleToEmissionAngle = numpy.arccos(cosDipoleToEmissionAngle)
+    
+    hertzianDipoleEffectiveArea = SER.HertzianDipoleEffectiveArea(wavelength,dipoleToEmissionAngle)
 
-powerDensities,Powers,integratedPowers = SER.CalcIncidentPowerAntenna([antennaPoint],pointArea,Times,EPositions,EVelocities,EAccelerations)
-
+    Powers[i] = powerDensities[i]*hertzianDipoleEffectiveArea
+    
+# powerDensities,Powers,integratedPowers = SER.CalcIncidentPowerAntenna([antennaPoint],pointArea,Times,EPositions,EVelocities,EAccelerations)
+integratedPowers = Powers
 
 # Do FFT 
 normalisedPowers = integratedPowers
