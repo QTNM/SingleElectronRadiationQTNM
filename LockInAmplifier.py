@@ -60,8 +60,8 @@ times = numpy.arange(0, numberOfPeriods*signalTimePeriod, step=1/samplingRate)
 signalSin = numpy.sin(2*numpy.pi*signalFrequency*times) * signalAmplitude
 
 # Add noise to signal
-noiseAmplitude = 166*2
-noise = noiseAmplitude*numpy.random.random(size=len(times))-noiseAmplitude/2
+noiseAmplitude = 166
+noise = noiseAmplitude*numpy.random.normal(size=len(times))
 noisySignal = signalSin + noise
 
 # Set up reference
@@ -79,6 +79,10 @@ axNoiseSignal.plot(times, noisySignal)
 axNoiseSignal.set_xlabel("Time (s)")
 axNoiseSignal.set_ylabel("Amplitude")
 figNoiseSignal.tight_layout()
+
+# Actual Signal
+
+
 
 # Set up filter parameters
 cutoffs = [1e5, 1e4, 1e3]
