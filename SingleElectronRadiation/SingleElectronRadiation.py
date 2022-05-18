@@ -1,15 +1,16 @@
 import numpy
 import matplotlib.pyplot as pyplot
+
 #pyplot.rcdefaults()
 pyplot.rcParams.update({'font.size': 18})
 
 
 # Constants
-ECharge = 1.602176634*10**-19 # Coulombs
+ECharge = 1.602176634e-19 # Coulombs
 pi = numpy.pi
-VacPerm = 8.8541878128*10**-12	# F/m - Farads per metre - Vacuum permittivity
+VacPerm = 8.8541878128e-12	# F/m - Farads per metre - Vacuum permittivity
 c = 299792458 # Speed of light in m/s
-EMass = 9.10938356*10**-31 # kg
+EMass = 9.10938356e-31 # kg
 
 # Initialize Variables
 DetectorPosition = numpy.array([0,0,0])
@@ -100,11 +101,24 @@ def FindColourBounds(InputArray,TimeResolution):
     return(ColourMin,ColourMax)
   
 def CalcLarmorPower(EAcceleration):
-    return 2/3 * ECharge**2 * (numpy.linalg.norm(EAcceleration))**2  / 4 / pi / VacPerm / c**3
+    return ECharge**2 * (numpy.linalg.norm(EAcceleration))**2 / (6 * pi * VacPerm * c**3)
+    # return 2/3 * ECharge**2 * (numpy.linalg.norm(EAcceleration))**2  / 4 / pi / VacPerm / c**3
+
+def CalcRelativisticLarmorPower(EVelocity, EAcceleration):
+    gamma = 1/numpy.sqrt(1-numpy.dot(EVelocity,EVelocity)/c**2)
+    beta = EVelocity/c
+    betaDot = EAcceleration/c
+    powerCGS = 2/3 * ECharge**2 / c * ( numpy.dot(betaDot, betaDot) - ( numpy.dot(numpy.cross(beta, betaDot), numpy.cross(beta, betaDot)) ))
+    powerSI = powerCGS * c**2 / 10**7
+    return powerSI
+
 
 def CalcCyclotronFreqWithPowerLoss(PowerLoss,BField):
     Premultiplier = ECharge*BField/(EMass+EEnergy/c**2)
     return Premultiplier*(1+PowerLoss/(EMass*c**2+EEnergy))
+
+def CalcCyclotronFreqWithPowerLossUsingEnergy(EEnergyPLoss, BField):
+    return ECharge * BField / (EMass + EEnergyPLoss/c**2)
 
 def CalcCyclotronAmpWithPowerLoss(PowerLoss,BField):
     v = (2*(EEnergy-PowerLoss)/EMass)**0.5 # velocity from K.E incorporating power loss
@@ -119,6 +133,7 @@ def CalcRelFarEField(Position,Time,EPosition,EVelocity,EAcceleration):
     n = (Position-EPosition)/r # Unit vector in direction from emission point to detector position
     Premultiplier = Premultiplier * 1 / (1-numpy.dot(n,EVelocity)/c)**3
     FarFieldPart = numpy.cross( n , numpy.cross( (n-EVelocity/c) , EAcceleration/c ) ) / numpy.linalg.norm(Position-EPosition)
+    # FarFieldPart = 1 / numpy.linalg.norm(Position-EPosition)
     RelFarEField = Premultiplier*FarFieldPart
     # And the time delay before it arrives at the detector will also be returned.
     TimeDelay = r/c # seconds
@@ -133,6 +148,7 @@ def CalcRelNearEField(Position,Time,EPosition,EVelocity,EAcceleration):
     Premultiplier = Premultiplier * 1/(1-numpy.dot(n,EVelocity)/c)**3
     
     NearFieldPart = (1-(numpy.linalg.norm(EVelocity)/c)**2)*(n-EVelocity/c) / (numpy.linalg.norm(Position-EPosition))**2
+    # NearFieldPart = 0.001
     RelNearEField = Premultiplier * NearFieldPart
     TimeDelay = r/c # seconds
     return RelNearEField,TimeDelay
@@ -170,6 +186,14 @@ def HertzianDipoleEffectiveArea(wavelength,dipoleToEmissionAngle):
     effectiveArea = 3/(8*pi)*wavelength**2*numpy.sin(dipoleToEmissionAngle)**2
     return effectiveArea
 
+def HalfWaveDipoleEffectiveLength(wavelength):
+    return wavelength/numpy.pi
+
+
+
+
+    
+
 
 
 
@@ -194,8 +218,8 @@ def RunSingleElectronRadiation():
     
 
     # Calculate time steps
-    TimeResolution = 100
-    MaxTime = 2*pi/AngFreq * 6
+    TimeResolution = 1000
+    MaxTime = 2*pi/AngFreq * 60
     TimeStep = MaxTime/TimeResolution
     TimesUsed = []
 
