@@ -7,7 +7,7 @@ import LockInAmplifierObjectOriented as LIA
 
 eMass = 9.1093837015e-31 # kg
 
-def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqBins):
+def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqBins, showGraphs=False):
     """Perform an FFT on signal (Powers) and create a spectrogram formed of FFTs of each time split."""
     print("\n    FFT Analyser")
     # Make frequency/time/amplitude graph
@@ -71,6 +71,17 @@ def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqB
         xAxisTimes = numpy.append(xAxisTimes,TimesSplit[-1][-1])
     
     print("")
+    if showGraphs==True:
+        zFFT = totalAmplitudesBounded
+        figFFTTimeDependent,axFFTTimeDependent = pyplot.subplots(nrows=1,ncols=1,figsize = [12,8])
+        im = axFFTTimeDependent.pcolormesh(xAxisTimes,yFrequencyBounds, numpy.transpose(zFFT))
+        axFFTTimeDependent.set_xlabel("Time (s)")
+        axFFTTimeDependent.set_ylabel("Frequency (Hz)")
+        colorbar = figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
+        colorbar.ax.set_ylabel("Fourier Transform Magnitude (V)")
+        figFFTTimeDependent.tight_layout()
+    
+    
     return (xAxisTimes,yFrequencyBounds,totalAmplitudesBounded)
 
 
@@ -239,13 +250,21 @@ def parallelLockInAmplifiers(signal, times, lowFrequency, highFrequency, lowPass
     
     
     
-def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False):
+def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Moving Average"):
     """A normal lock in amplifier but with a sweeping reference signal."""
     # print("\n    Lock-In Amplifier (Chirp Reference) Analyser")   
     timeLength = times[-1]-times[0]
     lockInAmpOutputs = []
     lowPassOrder = 5
-    lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate)     
+    if filterType == "Moving Average":
+        lowPassFilter = SPF.MovingAverage(timeConstantInSamples = 2e-5*sampleRate)
+    elif filterType == "Chebyshev":
+        lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate)   
+    elif filterType == "Butterworth":
+        lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
+    else:
+        print("Filter type unknown, default to Butterworth")
+        lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
     
     finalFrequency = startFrequency + frequencyGradient * timeLength
     chirpFrequencyCoefficient = (finalFrequency - startFrequency) * times/(2*timeLength) + startFrequency # ((f1-f0)t/2T+f0)
@@ -286,57 +305,6 @@ def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lo
     return quadratureMagnitude
 
 
-def SequentialSweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False):
-    timeLength = times[-1]-times[0]
-    finalFrequency = startFrequency + frequencyGradient * timeLength
-    
-    rootMinusOne = complex(0,1)
-    phaseOffset = 0
-    
-    chirpConstant = 2*numpy.pi*frequencyGradient # ((f1-f0)t/2T+f0)
-    complexReference = numpy.exp(rootMinusOne * (phaseOffset + startFrequency*2*numpy.pi * times + chirpConstant*times**2/2)) 
-    reference = numpy.imag(complexReference)
-    referencePhaseShifted = numpy.real(complexReference)
-    lowPassOrder = 5
-    lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate) 
-    
-    quadratureMagnitudes = []
-    quadraturePhases = []
-    
-    chunkSize = len(times)//10000
-    for i in range(len(times)//chunkSize):
-        j = chunkSize*i    
-        if j==0:
-            filterStateInPhase = [[0,0],[0,0],[0,0]] # lowPassFilter.GetInitialFilterState()
-            filterStateOutOfPhase = [[0,0],[0,0],[0,0]] # lowPassFilter.GetInitialFilterState()    
-        # Get lock-in amp output
-        lockInAmplifier = LIA.LockInAmp(signal[j:j+chunkSize], reference[j:j+chunkSize], referencePhaseShifted[j:j+chunkSize], lowPassFilter)
-        quadratureMagnitude, quadraturePhase, filterStateInPhase, filterStateOutOfPhase = lockInAmplifier.ProcessQuadratureSequential(filterStateInPhase, filterStateOutOfPhase)
-        quadratureMagnitudes.extend(quadratureMagnitude)
-        quadraturePhases.extend(quadraturePhase)
-
-    if showGraphs==True:
-        figLIATest, axLIATest = pyplot.subplots(1,1, figsize=[18,8])
-        axLIATest.plot(times, quadratureMagnitudes)
-        axLIATest.set_xlabel("Time (s)")
-        axLIATest.set_ylabel("Voltage (V)")
-
-    spectrumAnalyserOutput = FFTAnalyser(reference,
-                                         times,
-                                         lowFreqLimit=20e6,
-                                         upperFreqLimit=21e6,
-                                         nTimeSplits=10,
-                                         nFreqBins=40)
-    zFFT = spectrumAnalyserOutput[2]
-    figFFTTimeDependent,axFFTTimeDependent = pyplot.subplots(nrows=1,ncols=1,figsize = [12,8])
-    im = axFFTTimeDependent.pcolormesh(spectrumAnalyserOutput[0],spectrumAnalyserOutput[1], numpy.transpose(zFFT))
-    axFFTTimeDependent.set_xlabel("Time (s)")
-    axFFTTimeDependent.set_ylabel("Frequency (Hz)")
-    figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
-    figFFTTimeDependent.tight_layout()
-    axFFTTimeDependent.set_title("FFT of Reference Signal")
-
-    return quadratureMagnitudes
 
 
 
@@ -344,120 +312,7 @@ def SequentialSweepingLockInAmplifier(signal, times, startFrequency, frequencyGr
 
 
 
-def SweepingLockInAmplifierWithPhaseAdjust(signal, times, initialCyclotronAngFreq, downmixedCyclotronAngFreq, emittedPower, gamma, lowPassCutoff, sampleRate):
-    """Phase tracking lock in amplifier (in progress)"""
-    print("\n    Lock-In Amplifier (Tracking Chirp Reference) Analyser")   
-    timeLength = times[-1]-times[0] 
-    timestep = times[1]-times[0]
-    lowPassOrder = 5
-    lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate)   
-    
-    rootMinusOne = complex(0,1)
-    phaseOffset = 0
-    chirpConstant = ( initialCyclotronAngFreq*emittedPower / (eMass*gamma) ) / 299792458**2
-    print("Chirp constant:", chirpConstant)
 
-    complexReference = numpy.exp(rootMinusOne * (phaseOffset + downmixedCyclotronAngFreq * times + chirpConstant*times**2/2)) 
-    reference = numpy.real(complexReference)
-    referencePhaseShifted = numpy.imag(complexReference)
-    
-    quadratureMagnitudes = []
-    quadraturePhases = []
-    
-    chunkSize = len(times)//10000
-    
-    usedReference = []
-    chirpConstants = [chirpConstant]
-    for i in range(len(times)//chunkSize):
-        j = chunkSize*i
-        usedReference.extend(reference[j:j+chunkSize])
-        if j==0:
-            filterStateInPhase = [[0,0],[0,0],[0,0]]# lowPassFilter.GetInitialFilterState()
-            filterStateOutOfPhase = [[0,0],[0,0],[0,0]]# lowPassFilter.GetInitialFilterState()
-
-        # Get lock-in amp output
-        lockInAmplifier = LIA.LockInAmp(signal[j:j+chunkSize], reference[j:j+chunkSize], referencePhaseShifted[j:j+chunkSize], lowPassFilter)
-        quadratureMagnitude, quadraturePhase, filterStateInPhase, filterStateOutOfPhase = lockInAmplifier.ProcessQuadratureSequential(filterStateInPhase, filterStateOutOfPhase)
-
-        quadratureMagnitudes.extend(quadratureMagnitude)
-        quadraturePhases.extend(quadraturePhase)
-        
-        phaseDerivatives = []
-        lastDerivativeSmall = False
-        twoSuccessiveSmallDerivatives = False
-        doublePhaseDerivatives = []
-        for i in range(len(quadraturePhase)-1):
-            phaseDerivative = (quadraturePhase[i+1]-quadraturePhase[i]) / timestep
-            if abs(phaseDerivative) < 1e8:
-                phaseDerivatives.append(phaseDerivative)
-                if lastDerivativeSmall == True:
-                    doublePhaseDerivative = (phaseDerivatives[-1]-phaseDerivatives[-2]) / timestep
-                    if abs(doublePhaseDerivative) < 1e8:
-                        print("Double derivative")
-                        doublePhaseDerivatives.append(doublePhaseDerivative)
-                lastDerivativeSmall = True
-            else:
-                print("Dismissing a derivative - too large")
-                lastDerivativeSmall = False
-                
-                
-        averagePhaseDerivative = numpy.mean(phaseDerivatives)
-        print("Phase derivative:", averagePhaseDerivative)
-        
-        if len(doublePhaseDerivatives) > 0:
-            averageDoublePhaseDerivative = numpy.mean(doublePhaseDerivatives)
-            print("Double Phase Derivative:", averageDoublePhaseDerivative)
-
-        chirpConstants.append(chirpConstant)
-        
-        
-        # Take phase information and adjust reference
-        # reference = numpy.sin(2*numpy.pi * chirpFrequencyCoefficient * times) # - quadraturePhase[-1])
-        # referencePhaseShifted = numpy.cos(2*numpy.pi * chirpFrequencyCoefficient * times) # - quadraturePhase[-1])
-        # print("Threshold:", 0.5e-8*timestep*chunkSize)
-        # print("Integrated Sum:", numpy.sum(numpy.array(quadratureMagnitude*timestep)))
-        # if numpy.sum(numpy.array(quadratureMagnitude*timestep)) > 1.5e-8*timestep*chunkSize:
-        #     print("Activating phase matching")
-        #     chirpConstant = chirpConstant - averageDoublePhaseDerivative
-        #     complexReference = numpy.exp(rootMinusOne * (phaseOffset + downmixedCyclotronAngFreq * times + chirpConstant*times**2/2)) 
-        #     reference = numpy.real(complexReference)
-        #     referencePhaseShifted = numpy.imag(complexReference)
-
-    
-    figRef, axRef = pyplot.subplots(1,1, figsize=[18,8])
-    axRef.plot(times[:100], reference[:100])
-    axRef.set_xlabel("Time (s)")
-    axRef.set_ylabel("Reference Amplitude")
-    axRef.set_title("Reference Start")
-    
-    figRefEnd, axRefEnd = pyplot.subplots(1,1, figsize=[18,8])
-    axRefEnd.plot(times[-100:], reference[-100:])
-    axRefEnd.set_xlabel("Time (s)")
-    axRefEnd.set_ylabel("Reference Amplitude")
-    axRefEnd.set_title("Reference End")
-    
-    figFrequencyGradient, axFrequencyGradient = pyplot.subplots(1, 1, figsize=[18,8])
-    axFrequencyGradient.plot(times[::chunkSize], numpy.array(chirpConstants[:-1])/(2*numpy.pi))
-    axFrequencyGradient.set_xlabel("Time (s)")
-    axFrequencyGradient.set_ylabel("Frequency Gradient (Hz/s)")
-    
-    spectrumAnalyserOutput = FFTAnalyser(usedReference,
-                                         times,
-                                         lowFreqLimit=20e6,
-                                         upperFreqLimit=21e6,
-                                         nTimeSplits=10,
-                                         nFreqBins=40)
-    zFFT = spectrumAnalyserOutput[2]
-    
-    figFFTTimeDependent,axFFTTimeDependent = pyplot.subplots(nrows=1,ncols=1,figsize = [12,8])
-    im = axFFTTimeDependent.pcolormesh(spectrumAnalyserOutput[0],spectrumAnalyserOutput[1], numpy.transpose(zFFT))
-    axFFTTimeDependent.set_xlabel("Time (s)")
-    axFFTTimeDependent.set_ylabel("Frequency (Hz)")
-    figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
-    figFFTTimeDependent.tight_layout()
-    axFFTTimeDependent.set_title("FFT of Reference Signal")
-    
-    return quadratureMagnitudes, quadraturePhases
     
     
     

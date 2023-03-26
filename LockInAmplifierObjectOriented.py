@@ -4,14 +4,12 @@ import SignalProcessingFunctions as SPF
 pyplot.rcParams.update({'font.size': 18})
 
 # from memory_profiler import profile
-
-
- 
  
 class LockInAmp:
   
     def __init__(self, signal, reference, referencePhaseShifted, lowPassFilter):
-        # Accepts inputs of signal, reference, 90 degree phase shifted eference and low pass filter
+        # Accepts inputs of signal, reference, 90 degree phase shifted reference and low pass filter
+        # The low pass filter should be a class with an ApplyFilter(waveform) method
         self.signal = signal
         self.reference = reference
         self.referencePhaseShifted = referencePhaseShifted
@@ -38,39 +36,30 @@ class LockInAmp:
         ax[1].set_xlabel("Time (s)")
         ax[1].set_ylabel("Phase")
         fig.tight_layout()
-        
-    def ProcessQuadratureSequential(self, filterStateInPhase, filterStateOutOfPhase):
-        # Mixes signal and reference signals and applies low pass filter
-        # When working with sequential loop data, need to output the filter state and add it to the next element in the loop
-        # Which requires different ApplyFilter functions 
-        filteredMixedSignal, filterStateInPhase = self.filter.ApplyFilterSequential(self.signal*self.reference, filterState=filterStateInPhase)
-        filteredMixedSignalPhaseShifted, filterStateOutOfPhase = self.filter.ApplyFilterSequential(self.signal*self.referencePhaseShifted, filterState=filterStateOutOfPhase)
-        quadratureMagnitude = numpy.sqrt(filteredMixedSignal**2 + filteredMixedSignalPhaseShifted**2)
-        quadraturePhase = numpy.arctan2(filteredMixedSignalPhaseShifted, filteredMixedSignal)
-        return quadratureMagnitude, quadraturePhase, filterStateInPhase, filterStateOutOfPhase       
+         
     
 
 
 
 def RunLockInAmplifierTest():
     # Set up signal
-    signalFrequency = 27.0e9
+    signalFrequency = 5e5
     meanSignalPower = 3e-8
     signalAmplitude = meanSignalPower * numpy.sqrt(2)
     signalTimePeriod = 1/signalFrequency
     maxTime = 1e-3
     numberOfPeriods = maxTime*signalFrequency
 
-    sampleRate = 1e11
+    sampleRate = 125e6
     times = numpy.arange(0, numberOfPeriods*signalTimePeriod, step=1/sampleRate)
     
     signalSin = numpy.sin(2*numpy.pi*signalFrequency*times) * signalAmplitude
     
     # Add noise to signal
     temperature = 1 # K
-    antennaBandwidth = 51.096e6
+    antennaBandwidth = 40e6
     lengthInSamples = len(signalSin)
-    lowAntennaFreq = 26.975e9
+    lowAntennaFreq = 1
     noise = SPF.GenerateVoltageNoise(sampleRate = sampleRate,
                                      temp = temperature,
                                      resistance = 73.2,
@@ -82,7 +71,7 @@ def RunLockInAmplifierTest():
     noisySignal = signalSin + noise
     
     # Set up reference
-    referenceFrequency = 27.0e9
+    referenceFrequency = 5e5
     referencePhaseShift = 0.0*numpy.pi
     referenceAmplitude = 1
     
@@ -91,8 +80,8 @@ def RunLockInAmplifierTest():
     referenceCos = numpy.cos(2*numpy.pi*referenceFrequency*times + referencePhaseShift) * referenceAmplitude
     
     # Set up filter parameters
-    cutoffs = [1e4] 
-    cutoffLabels = ["10 kHz"]
+    cutoffs = [2e4] 
+    cutoffLabels = ["20 kHz"]
 
     # Apply lock-in amplifier for range of cutoffs
     magnitudesAndPhases = []
@@ -115,6 +104,8 @@ def RunLockInAmplifierTest():
     figMultiCutoff.suptitle("Sine wave signal")
     figMultiCutoff.legend()
     figMultiCutoff.tight_layout()
+    
+    print("LIA Output Mean (last half):", numpy.mean(magnitudesAndPhases[0][0][len(magnitudesAndPhases[0][0])//2*3//2:]))
     return 0
 
 
