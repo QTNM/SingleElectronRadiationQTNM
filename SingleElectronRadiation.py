@@ -45,9 +45,9 @@ def CalcNonRelNearEField(Position,Time,EPosition,EVelocity,EAcceleration):
 
 def CalcElectronCircularMotion(Time,AngFreq,Amplitude,ZPos):
     # Circular Motion around Z axis at Zpos
-    EPosition = Amplitude*numpy.array([numpy.cos(AngFreq*Time),numpy.sin(AngFreq*Time),ZPos])
-    EVelocity = Amplitude*AngFreq*numpy.array([-numpy.sin(AngFreq*Time),numpy.cos(AngFreq*Time),0])
-    EAcceleration = Amplitude*AngFreq**2*numpy.array([-numpy.cos(AngFreq*Time),-numpy.sin(AngFreq*Time),0])
+    EPosition = Amplitude*numpy.array([numpy.cos(AngFreq*Time),numpy.sin(AngFreq*Time),numpy.zeros(len(Time))+ZPos], dtype="object")
+    EVelocity = Amplitude*AngFreq*numpy.array([-numpy.sin(AngFreq*Time),numpy.cos(AngFreq*Time),numpy.zeros(len(Time))+0], dtype="object")
+    EAcceleration = Amplitude*AngFreq**2*numpy.array([-numpy.cos(AngFreq*Time),-numpy.sin(AngFreq*Time),numpy.zeros(len(Time))+0], dtype="object")
     return EPosition,EVelocity,EAcceleration
 
 def CalcElectronCircularMotionPerp(Time,AngFreq,Amplitude,XPos):
@@ -218,7 +218,7 @@ def RunSingleElectronRadiation():
     
 
     # Calculate time steps
-    TimeResolution = 1000
+    TimeResolution = 10
     MaxTime = 2*pi/AngFreq * 60
     TimeStep = MaxTime/TimeResolution
     TimesUsed = []
@@ -395,7 +395,30 @@ def RunSingleElectronRadiation():
 
 # Run the code
 if __name__ == "__main__":
-    RunSingleElectronRadiation()
+    # RunSingleElectronRadiation()
+    
+    print("Testing one field value:")
+    testTime = 0
+    testAntennaPos = numpy.array([0.02, 0, 0])
+    testPos = numpy.array([ 0.0102061,  -0.00461087,  0.0041145])
+    testVel = numpy.array([ 4.42894e+07,  2.55598e+07,   5.9011e+07])
+    testAcc = numpy.array([  4.31388e+18,   -7.48699e+18,  5.20547e+15])
+    EField = CalcRelFarEField(testAntennaPos, testTime, testPos, testVel, testAcc)[0] + CalcRelNearEField(testAntennaPos, 0, testPos, testVel, testAcc)[0]
+    print(EField)
+    
+    
+    # Check analytic solution:
+    e0_kev = 18.6
+    x0=0.001
+    y0=0.001
+    vx0=0.001
+    vy0=0.001
+    t1=0
+    # analytic_solution(x0, y0, vx0, vy0, e0_kev, t1)
+    CalcElectronCircularMotion(t1, omega, r, 0)
+
+    
+    
     
 
     
