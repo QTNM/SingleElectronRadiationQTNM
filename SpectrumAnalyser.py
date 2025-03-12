@@ -5,6 +5,8 @@ from scipy import signal as ScipySignal
 import LockInAmplifierObjectOriented as LIA
 # from memory_profiler import profile
 
+from scipy.signal import find_peaks
+
 eMass = 9.1093837015e-31 # kg
 
 def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqBins, showGraphs=False):
@@ -19,7 +21,7 @@ def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqB
     TimesBoundaries = []
     for i in range(nSplits):
         # For each time slice, perform the FFT and store the powers and frequencies
-        FFTFreqsSplit[i],FFTPowersSplit[i] = SPF.FourierTransformPower(PowersSplit[i],TimesSplit[i])
+        FFTFreqsSplit[i],FFTPowersSplit[i] = SPF.FourierTransformWaveform(PowersSplit[i],TimesSplit[i])
         TimesBoundaries.append(TimesSplit[i][0])
         
     print("FFT Step size:", FFTFreqsSplit[0][1]-FFTFreqsSplit[0][0])     
@@ -80,7 +82,7 @@ def FFTAnalyser(Powers, Times, lowFreqLimit, upperFreqLimit, nTimeSplits, nFreqB
         colorbar = figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
         colorbar.ax.set_ylabel("Fourier Transform Magnitude (V)")
         figFFTTimeDependent.tight_layout()
-    
+        axFFTTimeDependent.set_ylim(350e3,465e3)
     
     return (xAxisTimes,yFrequencyBounds,totalAmplitudesBounded)
 
@@ -96,6 +98,7 @@ def ApplyFFTAnalyser(times, signal, lowSearchFreq, highSearchFreq, nTimeSplits, 
     axFFTTimeDependent.set_ylabel("Frequency (Hz)")
     figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
     figFFTTimeDependent.tight_layout()
+    #axFFTTimeDependent.set_ylim(0,1e6)
     return 0
 
 
@@ -250,18 +253,20 @@ def parallelLockInAmplifiers(signal, times, lowFrequency, highFrequency, lowPass
     
     
     
-def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Moving Average"):
+def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Scipy Single Pole IIR"):
     """A normal lock in amplifier but with a sweeping reference signal."""
     # print("\n    Lock-In Amplifier (Chirp Reference) Analyser")   
     timeLength = times[-1]-times[0]
     lockInAmpOutputs = []
-    lowPassOrder = 5
-    if filterType == "Moving Average":
-        lowPassFilter = SPF.MovingAverage(timeConstantInSamples = 2e-5*sampleRate)
+    lowPassOrder = 1
+    if filterType == "Single Pole IIR":
+        lowPassFilter = SPF.SinglePoleIIR(timeConstantInSamples = 1e-4*sampleRate)
     elif filterType == "Chebyshev":
         lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate)   
     elif filterType == "Butterworth":
         lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
+    elif filterType == "Scipy Single Pole IIR":
+        lowPassFilter = SPF.ScipySinglePoleIIR(lowPassCutoff, lowPassOrder, sampleRate)
     else:
         print("Filter type unknown, default to Butterworth")
         lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
@@ -280,6 +285,7 @@ def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lo
         axLIATest.plot(times,quadratureMagnitude)
         axLIATest.set_xlabel("Time (s)")
         axLIATest.set_ylabel("Voltage (V)")
+        axLIATest.set_xlim(0,0.0001)
         
         figRef, axRef = pyplot.subplots(1,1, figsize=[18,8])
         axRef.plot(times[:100], reference[:100])
@@ -294,7 +300,7 @@ def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lo
         axRefEnd.set_title("Reference End")
     
         # Check FFT to see if sweep is correct
-        spectrumAnalyserOutput = FFTAnalyser(reference+signal, times, 2.00e7, 2.10e7, 10, 40)
+        spectrumAnalyserOutput = FFTAnalyser(reference, times, 300e3, 900e3, 10, 40)
         zFFT = spectrumAnalyserOutput[2]
         figFFTTimeDependent,axFFTTimeDependent = pyplot.subplots(nrows=1,ncols=1,figsize = [12,8])
         im = axFFTTimeDependent.pcolormesh(spectrumAnalyserOutput[0],spectrumAnalyserOutput[1], numpy.transpose(zFFT))
@@ -307,7 +313,226 @@ def SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lo
 
 
 
+def SweepingLockInAmplifierTimeShifted(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Scipy Single Pole IIR", startTime=0, LIAReferenceLength=0.001):
+    """A sweeping lock in amplifier with custom start time. Also has repetition after some amount of time."""
+    # print("\n    Lock-In Amplifier (Chirp Reference) Analyser")   
+    # timeLength = times[-1]-times[0]
+    lockInAmpOutputs = []
+    
+    # Set low pass filter properties
+    lowPassOrder = 1
+    if filterType == "Single Pole IIR":
+        lowPassFilter = SPF.SinglePoleIIR(timeConstantInSamples = 1e-4*sampleRate)
+    elif filterType == "Chebyshev":
+        lowPassFilter = SPF.ChebyLowPass(lowPassCutoff, lowPassOrder, sampleRate)   
+    elif filterType == "Butterworth":
+        lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
+    elif filterType == "Scipy Single Pole IIR":
+        lowPassFilter = SPF.ScipySinglePoleIIR(lowPassCutoff, lowPassOrder, sampleRate)
+    else:
+        print("Filter type unknown, default to Butterworth")
+        lowPassFilter = SPF.ButterLowPass(lowPassCutoff, lowPassOrder, sampleRate)
+    
+    
+    # finalFrequency = startFrequency + frequencyGradient * timeLength
+    # chirpFrequencyCoefficient = (finalFrequency - startFrequency) * times/(2*timeLength) + startFrequency # ((f1-f0)t/2T+f0)
+    # (finalFrequency - startFrequency) / timelength = frequencyGradient so can simplify this
+    # Also add in reset in the form of a modulo on the incoming time, so it repeats each x ms
+    chirpFrequencyCoefficient = frequencyGradient * numpy.remainder(times-startTime, LIAReferenceLength) / 2 + startFrequency
+    reference = numpy.sin(2*numpy.pi * chirpFrequencyCoefficient * numpy.remainder(times-startTime, LIAReferenceLength))
+    referencePhaseShifted = numpy.cos(2*numpy.pi * chirpFrequencyCoefficient * numpy.remainder(times-startTime, LIAReferenceLength))
+    
+    lockInAmplifier = LIA.LockInAmp(signal, reference, referencePhaseShifted, lowPassFilter)
+    quadratureMagnitude, quadraturePhase = lockInAmplifier.ProcessQuadrature()
+    lockInAmpOutputs.append(quadratureMagnitude)
+    
+    if showGraphs==True:
+        figLIATest, axLIATest = pyplot.subplots(1,1, figsize=[18,8])
+        axLIATest.plot(times,quadratureMagnitude)
+        axLIATest.set_xlabel("Time (s)")
+        axLIATest.set_ylabel("Voltage (V)")
+        axLIATest.set_xlim(0,0.0001)
+        
+        figRef, axRef = pyplot.subplots(1,1, figsize=[18,8])
+        axRef.plot(times[:100], reference[:100])
+        axRef.set_xlabel("Time (s)")
+        axRef.set_ylabel("Reference Amplitude")
+        axRef.set_title("Reference Start")
+        
+        figRefEnd, axRefEnd = pyplot.subplots(1,1, figsize=[18,8])
+        axRefEnd.plot(times[-100:], reference[-100:])
+        axRefEnd.set_xlabel("Time (s)")
+        axRefEnd.set_ylabel("Reference Amplitude")
+        axRefEnd.set_title("Reference End")
+    
+        # Check FFT to see if sweep is correct
+        spectrumAnalyserOutput = FFTAnalyser(reference, times, 300e3, 900e3, 10, 40)
+        zFFT = spectrumAnalyserOutput[2]
+        figFFTTimeDependent,axFFTTimeDependent = pyplot.subplots(nrows=1,ncols=1,figsize = [12,8])
+        im = axFFTTimeDependent.pcolormesh(spectrumAnalyserOutput[0],spectrumAnalyserOutput[1], numpy.transpose(zFFT))
+        axFFTTimeDependent.set_xlabel("Time (s)")
+        axFFTTimeDependent.set_ylabel("Frequency (Hz)")
+        figFFTTimeDependent.colorbar(im, ax=axFFTTimeDependent)
+        figFFTTimeDependent.tight_layout()
+    return quadratureMagnitude
+    
 
+
+
+
+
+
+
+def TestFFTAnalyser():
+    timeLength = 1e-3
+    times = numpy.arange(0,timeLength,step=1e-9)
+    signal = 1.055 * 11e-3*numpy.sqrt(2)*  SPF.GenerateChirpSignal(times, startFrequency=350e3, frequencyGradient=1.11e8)
+    noise = SPF.GenerateAdderSpectrumNoise(timeLength, sampleRate=1e9, noiseRMS=290e-3)
+    # noise = numpy.random.normal(0, SPF.GetRMS(signal)/0.00764917, len(signal))
+        
+    signal *= 1
+
+    print("RMS of noise:", SPF.GetRMS(noise))
+    print("SNR: ", SPF.GetRMS(signal)/SPF.GetRMS(noise))
+    # For 500MHz bandwidth, want 0.00764917 SNR (RMS)
+
+    
+    signal +=noise
+    nTimeSplits = int(timeLength// 95e-6) # number of time segments, optimal is 95us for 111kHz/ms freq grad
+    # print(nTimeSplits)
+    nFreqBins = int(0.5e9 // 10.6e3)
+    FFTAnalyser(signal, times, lowFreqLimit=0, upperFreqLimit=0.5e9, nTimeSplits=nTimeSplits, nFreqBins=nFreqBins, showGraphs=True)
+    return 0
+
+
+
+def TestLIAResponse():
+    timeLength = 1e-3
+    times = numpy.arange(0,timeLength,step=1e-9)
+    signal = 3* 11e-3*numpy.sqrt(2)*  SPF.GenerateChirpSignal(times, startFrequency=350e3, frequencyGradient=1.11e8)
+    signal[len(signal)//2:] = 0
+    noise = SPF.GenerateAdderSpectrumNoise(timeLength, sampleRate=1e9, noiseRMS=290e-3)
+    signal +=noise
+    
+    
+    
+    startFrequency = 350e3
+    frequencyGradient = 1.11e8
+    lowPassCutoff=15e3
+    sampleRate = 1/(times[1]-times[0])
+    
+    LIAMagnitudeOutput = SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Scipy Single Pole IIR")
+    lowPassCutoffNarrow=1.5e3
+    LIAMagnitudeOutputNarrowFilter = SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoffNarrow, sampleRate, showGraphs=False,  filterType = "Scipy Single Pole IIR")
+
+    fig, ax = pyplot.subplots(1, 1, figsize=[16,8])
+    ax.plot(times, LIAMagnitudeOutput, label="15 kHz")
+    ax.plot(times, LIAMagnitudeOutputNarrowFilter, label="1.5 kHz")
+    ax.legend()
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Voltage (V)")
+    return 0
+
+
+
+
+
+
+
+
+
+
+
+def CalculatePeakMean(data, maxIndex, peakWidth):
+        # peakWidth = 50 # samples, gives half the width of the peak to be investigated
+        if maxIndex-peakWidth < 0:
+            lowerPeakIndex = 0
+        else:
+            lowerPeakIndex = maxIndex-peakWidth
+        if maxIndex+peakWidth > len(data)-1:
+            upperPeakIndex = -2
+        else:
+            upperPeakIndex = maxIndex+peakWidth
+            
+        dataMeanAroundMax = numpy.average(data[lowerPeakIndex : upperPeakIndex+1])
+        
+        return dataMeanAroundMax
+
+def CalculateBiggestMaxMeanOfNPeaks(data, nPeaks, peakWidth, distance=25, printGraphs = False, broadnessArray = None, label=None):
+    peakIndices, peakDict = find_peaks(data, height=(None, None), distance=distance)
+    peakHeights = peakDict["peak_heights"]
+    # highest_peak_index = peak_indices[numpy.argmax(peak_heights)]
+    # second_highest_peak_index = peak_indices[numpy.argpartition(peak_heights,-2)[-2]]
+    locationsOfHighestNPeaks = peakIndices[ numpy.argpartition(peakHeights,-nPeaks)[-nPeaks:] ]
+    biggestMaxMean = 0
+    biggestPeakIndex = 0
+    for location in locationsOfHighestNPeaks:
+        currentMaxMean = CalculatePeakMean(data, location, peakWidth)
+        if currentMaxMean > biggestMaxMean:
+            biggestMaxMean = currentMaxMean
+            biggestPeakIndex = location
+    
+    if printGraphs == True:
+        print("Location of highest N peaks:", locationsOfHighestNPeaks)
+        figTestPeaks,axTestPeaks = pyplot.subplots(1, 1, figsize=[16,8])
+        axTestPeaks.plot(data)
+        axTestPeaks.scatter(locationsOfHighestNPeaks, numpy.zeros(len(locationsOfHighestNPeaks)))
+        axTestPeaks.set_title(label)
+    
+    
+    #if broadnessArray is not None:
+        #biggestPeakBroadness = FindBroadnessOfPeak(data, biggestPeakIndex, relativeHeight = 0.75)
+        #broadnessArray.append(biggestPeakBroadness)
+        
+    
+    
+    return biggestMaxMean
+
+def TestLIAFrequencyResponse():
+    timeLength = 1e-3
+    times = numpy.arange(0,timeLength,step=1e-9)
+    signal = 2 * 11e-3*numpy.sqrt(2)*  SPF.GenerateChirpSignal(times, startFrequency=350e3, frequencyGradient=1.11e8)
+    signal[len(signal)//2:] = 0
+    noise = SPF.GenerateAdderSpectrumNoise(timeLength, sampleRate=1e9, noiseRMS=290e-3)
+    signal +=noise 
+    
+    startFrequencies = numpy.arange(200e3,500e3, step=1e3)
+    frequencyGradient=1.11e8
+    lowPassCutoff=15e3
+    sampleRate = 1/(times[1]-times[0])
+    
+    
+    peakWidth = int(sampleRate*0.1*timeLength)
+    
+    
+    
+    LIAMeanMaxes = []
+    
+    for startFrequency in startFrequencies:
+        LIAMagnitudeOutput = SweepingLockInAmplifier(signal, times, startFrequency, frequencyGradient, lowPassCutoff, sampleRate, showGraphs=False,  filterType = "Scipy Single Pole IIR")
+        LIAMeanMaxes.append( CalculateBiggestMaxMeanOfNPeaks(LIAMagnitudeOutput, nPeaks=5, peakWidth=peakWidth, distance=peakWidth/2, printGraphs = False, broadnessArray = None, label=None) )
+    
+    fig,ax = pyplot.subplots(1, 1, figsize=[16,8])
+    ax.plot(startFrequencies, LIAMeanMaxes)
+    ax.set_xlabel("Start Frequency (Hz)")
+    ax.set_ylabel("LIA Response")
+    
+    return 0
+
+
+
+if __name__ == "__main__":
+    #times = numpy.arange(0,0.002,step=0.0000001)
+    #signal = SPF.GenerateChirpSignal(times, startFrequency=350000, frequencyGradient=3.45e8)
+    #signal[len(signal)//2:] = 0
+    #figSig,axSig = pyplot.subplots(1, 1, figsize=[16,8])
+    #axSig.plot(times, signal)
+    #SweepingLockInAmplifier(signal,times, startFrequency=350000,frequencyGradient=3.45e8,lowPassCutoff=15000,sampleRate=1/(times[1]-times[0]),showGraphs=True)
+    #sweepingLockInOutput = SweepingLockInAmplifierTimeShifted(signal, times, startFrequency=350000, frequencyGradient=3.45e8, lowPassCutoff=15000, sampleRate=1/(times[1]-times[0]), showGraphs=True,  filterType = "Scipy Single Pole IIR", startTime=-0.0005, LIAReferenceLength=0.001)
+
+    TestFFTAnalyser()
+    #TestLIAResponse()
+    #TestLIAFrequencyResponse()
 
 
 

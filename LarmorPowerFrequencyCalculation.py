@@ -22,10 +22,12 @@ def CyclotronRadius(perpendicularVelocity, B, gamma, angularFrequency):
     return r
 
 eMass = 9.10938356e-31
+protonMass = 1.67262192595e-27
+neutronMass = 1.67492750056e-27 # kg
 eCharge = 1.602176634e-19
 c = 299792458
 pi = numpy.pi
-KEeV = 18600
+KEeV = 18566.66
 KEJ = KEeV*eCharge
 vacPermit = 8.8541878128*10**-12
 
@@ -36,16 +38,18 @@ if __name__ == "__main__":
     v = numpy.sqrt(vsquared)
     
     print("Velocity:",v)
-    B= 1.0
+    #B= 0.7000#2313059249833
+    B = 1.0
     angularFrequency = eCharge*B/(gamma*eMass)
     
     print("Angular Frequency:",angularFrequency)
     print("Frequency:",angularFrequency/(2*numpy.pi))
+    print("Wavelength:",c/(angularFrequency/(2*numpy.pi)), "m")
     
     # Axial oscillation frequency calculator
     
     pitchAngleDeg = 90
-    trapLength = 1 # metres
+    trapLength = 0.2 # metres
     
     axialVelocity = v * numpy.cos(pitchAngleDeg/180*numpy.pi)
     print("Axial Velocity:",axialVelocity)
@@ -59,11 +63,50 @@ if __name__ == "__main__":
     print("Cyclotron Radius:",r)
     
     
+    
+    print("######### Recoil Energy Calculation #########")
+    electronVelocity = v # implicit assumption that the KE is equal to the endpoint energy...
+    electronMomentum = electronVelocity * gamma * eMass
+    endpointEnergy = 18566.66 # eV
+    # Assuming 0 neutrino velocity:
+    eMass_eV = eMass * c * c / eCharge
+    daughterMass_eV = (2*protonMass + neutronMass) * c * c / eCharge
+    daughterMass = 2*protonMass + neutronMass
+    electronKEeV = endpointEnergy - eMass_eV - daughterMass_eV # 
+    daughterMomentum = -electronMomentum
+    daughterVelocity = daughterMomentum/daughterMass
+    
+    Q = endpointEnergy * eCharge
+    print("Q",Q)
+    E_md = daughterMass * c**2
+    
+    daughterMassEnergy = daughterMass * c**2
+    electronMassEnergy = eMass*c**2
+    print("daughter mass energy:",daughterMassEnergy)
+    print("electron mass energy:",electronMassEnergy)
+    
+    E_daughter = (Q**2 - electronMassEnergy**2 + daughterMassEnergy**2) / (2*Q)
+    print("E_daughter:",E_daughter)
+    E_rec = (Q**2 + 2*Q*electronMassEnergy) / (2 * (daughterMassEnergy + Q + electronMassEnergy) )
+    
+    E_rec_eV = E_rec / eCharge
+    print("Electron momentum:",electronMomentum / eCharge)
+    print("Recoil energy:",E_rec_eV)
+    
+    
+    
+    
+    
+    
+    
+    
     electronKE = KEJ
-    timeStep = 1e-10
-    times = numpy.arange(0, 1e-9, step = timeStep)
+    timeStep = 1e-11
+    times = numpy.arange(0, 1e-10, step = timeStep)
     powers = []
     electronKEs = []
+    frequencies = []
+    radii = []
     for t in range(len(times)):
         # At each time, we want to know the power output
         # This requires knowing the acceleration
@@ -82,16 +125,23 @@ if __name__ == "__main__":
         
         
         r = (eCharge*perpendicularVelocity*B) / (gamma * eMass * angularFrequency**2)
+        radii.append(r)
         #print("r:",r)
         a = CalcAcceleration(angularFrequency, r)
+        if t==0:
+            print("Initial acceleration:",a)
         #print("a",a)
         currentPower = LarmorPower(a)
-        print("Power:",currentPower)
+        # print("Power:",currentPower)
         electronKEs.append(electronKE)   
+        
+        frequencies.append(AngularFrequency(electronKE, B) / (2*numpy.pi))
         
         electronKE -= currentPower * (timeStep)
     
         powers.append(currentPower)
+
+        
         
     electronKEs = numpy.array(electronKEs)
     
@@ -105,10 +155,38 @@ if __name__ == "__main__":
     axEnergy.plot(times,electronKEs/eCharge)
     axEnergy.set_xlabel("Time (s)")
     axEnergy.set_ylabel("Energy (eV)")
+    
+    figFrequency, axFrequency = pyplot.subplots(1,1,figsize=[10,8])
+    axFrequency.plot(times,frequencies)
+    axFrequency.set_xlabel("Time (s)")
+    axFrequency.set_ylabel("Frequency (Hz)")
+    
+    print("Frequency Gradients:", numpy.gradient(frequencies, timeStep))
         
     initialKineticEnergy = KEJ
-    finalKineticEnergy = electronKE
+    finalKineticEnergy = electronKEs[-1]
     
     print("Initial KE (eV):", initialKineticEnergy/eCharge)
     print("Final KE (eV):", finalKineticEnergy/eCharge)
+    
+    
+    figRadii, axRadii = pyplot.subplots(1, 1, figsize=[16,8])
+    axRadii.plot(times, radii)
+    
+    
+    print("Test numbers:")
+    testE1 = 18.575e3
+    testE2 = 18.4e3
+    testFreq1 = AngularFrequency(testE1*eCharge, B=0.7) / (2*numpy.pi)
+    testFreq2 = AngularFrequency(testE2*eCharge, B=0.7) / (2*numpy.pi)
+    print("testFreq1:", testFreq1)
+    print("testFreq2:", testFreq2)
+    print("Difference:", testFreq2 - testFreq1)
+    print("Gradient:", (testFreq2 - testFreq1) / 1e-4)
+    
+    
+    
+    
+    
+
     

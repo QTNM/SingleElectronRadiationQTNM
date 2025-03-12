@@ -70,9 +70,10 @@ def GenerateRandomChirpSignal(sampleRate, times, startFrequencyBounds, frequency
 def FrequencyResolutionTest(sampleRate = 125e6, signalAmplitude = 3.075179595089654e-08 * 2**0.5, temperature = 8, resistance = 73.2):
     lowFreq = 480000
     highFreq = 520000
-    lowPassCutoff = 2000
-    times = numpy.arange(0,0.001, step = 1/sampleRate)
-    frequenciesToTest = numpy.linspace(lowFreq, highFreq, num=(highFreq-lowFreq)//lowPassCutoff * 50)
+    lowPassCutoff = 20000
+    # times = numpy.arange(0,0.001, step = 1/sampleRate)
+    times = numpy.arange(0, 727.567e-9, step=1/sampleRate)
+    frequenciesToTest = numpy.linspace(lowFreq, highFreq, num=50) # (highFreq-lowFreq)//lowPassCutoff * 50)
     signalChirp = GenerateRandomChirpSignal(sampleRate,
                                             times,
                                             startFrequencyBounds = [500000, 500000.001],
@@ -95,7 +96,7 @@ def FrequencyResolutionTest(sampleRate = 125e6, signalAmplitude = 3.075179595089
                                                                   showGraphs = False,
                                                                   filterType = "Butterworth")
         lockInMeans.append( numpy.mean( lockInResponse ) )
-    
+        print(numpy.mean(lockInResponse))
     figFreqRes, axFreqRes = pyplot.subplots(1, 1, figsize=[16,8])
     axFreqRes.plot(frequenciesToTest-500000, lockInMeans)
     axFreqRes.set_xlabel(r"$\Delta f$ (Hz)")

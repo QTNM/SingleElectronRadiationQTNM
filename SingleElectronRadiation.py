@@ -17,7 +17,7 @@ DetectorPosition = numpy.array([0,0,0])
 EVelocity = numpy.array([0,0,0]) # Electron velocity at retarded time
 EAcceleration = numpy.array([0,0,0]) # Electron acceleration at retarded time
 EPosition = numpy.array([0,0,0])
-EPositionRet = numpy.array([0,0,0]) # Electron retarted position (Electron position evaluated at retarded time)
+EPositionRet = numpy.array([0,0,0]) # Electron retarded position (Electron position evaluated at retarded time)
 EEnergy = 18600*ECharge # Electron Energy in Joules, 18.6keV # Initial Energy
 
 
@@ -40,14 +40,14 @@ def CalcNonRelNearEField(Position,Time,EPosition,EVelocity,EAcceleration):
     r = numpy.linalg.norm(Position-EPosition) # Distance from electron (radiation point) to detector
     VecEmissionToObsUnit = (Position-EPosition)/r # Unit vector in direction from emission point to detector position
     n = VecEmissionToObsUnit
-    EFieldNear = ECharge/(4*pi*VacPerm) * (n/r**2) # I need a vector
+    EFieldNear = ECharge/(4*pi*VacPerm) * (n/r**2) 
     return EFieldNear
 
 def CalcElectronCircularMotion(Time,AngFreq,Amplitude,ZPos):
     # Circular Motion around Z axis at Zpos
-    EPosition = Amplitude*numpy.array([numpy.cos(AngFreq*Time),numpy.sin(AngFreq*Time),numpy.zeros(len(Time))+ZPos], dtype="object")
-    EVelocity = Amplitude*AngFreq*numpy.array([-numpy.sin(AngFreq*Time),numpy.cos(AngFreq*Time),numpy.zeros(len(Time))+0], dtype="object")
-    EAcceleration = Amplitude*AngFreq**2*numpy.array([-numpy.cos(AngFreq*Time),-numpy.sin(AngFreq*Time),numpy.zeros(len(Time))+0], dtype="object")
+    EPosition = Amplitude*numpy.array([numpy.cos(AngFreq*Time),numpy.sin(AngFreq*Time),ZPos])
+    EVelocity = Amplitude*AngFreq*numpy.array([-numpy.sin(AngFreq*Time),numpy.cos(AngFreq*Time),0*Time])
+    EAcceleration = Amplitude*AngFreq**2*numpy.array([-numpy.cos(AngFreq*Time),-numpy.sin(AngFreq*Time),0*Time])
     return EPosition,EVelocity,EAcceleration
 
 def CalcElectronCircularMotionPerp(Time,AngFreq,Amplitude,XPos):
@@ -146,7 +146,6 @@ def CalcRelNearEField(Position,Time,EPosition,EVelocity,EAcceleration):
     r = numpy.linalg.norm(Position-EPosition) # Distance from electron (radiation point) to detector
     n = (Position-EPosition)/r # Unit vector in direction from emission point to detector position
     Premultiplier = Premultiplier * 1/(1-numpy.dot(n,EVelocity)/c)**3
-    
     NearFieldPart = (1-(numpy.linalg.norm(EVelocity)/c)**2)*(n-EVelocity/c) / (numpy.linalg.norm(Position-EPosition))**2
     # NearFieldPart = 0.001
     RelNearEField = Premultiplier * NearFieldPart
